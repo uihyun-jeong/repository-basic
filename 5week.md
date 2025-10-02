@@ -49,6 +49,7 @@ State는 정하기 나름인데, 두 개를 정의할 때 항등식이 되는 �
 이 행렬을 이끌어내기 위함이다.  
 
 <img width="747" height="165" alt="image" src="https://github.com/user-attachments/assets/ed9ec82e-e8a7-4fb5-9bbf-1ad79af3827e" />  
+
 첫번째 줄 식에서 2번째 줄 식으로 넘어갈 때, a=>A로 바뀌며 상수가 행렬이 된다.  
 
 문제 예시) 2차 미분방정식 2개이므로 4차 미분 방정식이 만들어지는데 이를 State space equation
