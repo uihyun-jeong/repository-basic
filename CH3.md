@@ -15,6 +15,7 @@ F(t) = M(d^2y/dt) - b(dy/dt) -ky => M(dx_2(t)/dt) = bx_2(t) + kx_1(t) + F(t)
 (c) \vec{x'} = [0, 1; k/M, b/M]* \vec{x} + [0; 1/M] * \vec{F(t)}  
   \vec{y(t)} = [0, 1] * \vec{x}  
 
+  
 ###P3.3 그리몌3.3과 같은 RLC회로가 주어졌다. 상태변수 x_1(t) = i_L(t), x_2(t) = v_c(t)로 설정하고 상태미분방정식을 구하라.  
   
 <img align="left" width="500" height="300" src="https://postfiles.pstatic.net/MjAyNTEwMTJfMTEz/MDAxNzYwMjUyNzk1MTMy.oJHbmt2fa_RWt6dsUj7Ehs84Kcb9sKcz624U41unUuQg.yb3GOzzYnzexJeHYb87YRGNyylWkWNMb0MgE3QHnDtIg.PNG/image.png?type=w773"> 
