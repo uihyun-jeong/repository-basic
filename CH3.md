@@ -7,7 +7,7 @@
 <img align="left" width="500" height="300" src="https://postfiles.pstatic.net/MjAyNTEwMTJfOTIg/MDAxNzYwMjUyNzc5NTI0.t4mTuSZDcyGpxDQ3vZ4tSYqhK5dorLBNuvKi_hckmDcg.zOaT9f5_fDyIBzJ1unn0unuxpaXyyLGfGKa8wk1gI1Ag.PNG/image.png?type=w773">  
 
 </div>  
-
+  
 F(t) = M(d^2y/dt) - b(dy/dt) -ky => M(dx_2(t)/dt) = bx_2(t) + kx_1(t) + F(t)  
 (a) x_1(t) = y(t), x_2(t) = dy/dt  
 (b) dx_2(t)/dt = (b/M)*x_2(t) + (k/M)*x_1(t) + (1/M)*F(t)  
