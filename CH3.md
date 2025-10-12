@@ -15,7 +15,7 @@ F(t) = M(d^2y/dt) - b(dy/dt) -ky => M(dx_2(t)/dt) = bx_2(t) + kx_1(t) + F(t)
   
 ###P3.3 그림의3.3과 같은 RLC회로가 주어졌다. 상태변수 x_1(t) = i_L(t), x_2(t) = v_c(t)로 설정하고 상태미분방정식을 구하라.  
   
-<img width="150" height="100" src="https://postfiles.pstatic.net/MjAyNTEwMTJfMTEz/MDAxNzYwMjUyNzk1MTMy.oJHbmt2fa_RWt6dsUj7Ehs84Kcb9sKcz624U41unUuQg.yb3GOzzYnzexJeHYb87YRGNyylWkWNMb0MgE3QHnDtIg.PNG/image.png?type=w773"><br>
+<img width="500" height="300" src="https://postfiles.pstatic.net/MjAyNTEwMTJfMTEz/MDAxNzYwMjUyNzk1MTMy.oJHbmt2fa_RWt6dsUj7Ehs84Kcb9sKcz624U41unUuQg.yb3GOzzYnzexJeHYb87YRGNyylWkWNMb0MgE3QHnDtIg.PNG/image.png?type=w773"><br>
   
 L*(di_L/dt) - v_c + v_2 - v_1 = 0  
 i_L = i_R - C*(dv_c(t)/dt), v_R = v_2 - v_c = (i_R)*R => i_R = (v_2 - v_c)/R  
@@ -37,23 +37,23 @@ y(t) = x_2(t) + 2x_1(t)이므로
   
 ###P3.12 전달함수가 Y(s)/R(s) = T(s) = 8*(s+5)/(s^3 + 12s^2 + 44s + 48)인 시스템에서 (a) 상태공간모델을 구하라. (b) 상태천이행렬 Φ(t) 를 구하라.  
 a문제를 실행시키는 코드이며  
-<img align="left" width="500" height="300" src="https://postfiles.pstatic.net/MjAyNTEwMTJfMTQy/MDAxNzYwMjU2MDkwODgy.QVKePq8rz_L_Bfk-bms9dSCX6fL4cLg-fyoSVeVWFAkg.K_hywO-1MP_RgeC7y38qFARp6zwXbxBDPZcAo9_r3mEg.PNG/image.png?type=w773"><br>  
+<img width="500" height="300" src="https://postfiles.pstatic.net/MjAyNTEwMTJfMTQy/MDAxNzYwMjU2MDkwODgy.QVKePq8rz_L_Bfk-bms9dSCX6fL4cLg-fyoSVeVWFAkg.K_hywO-1MP_RgeC7y38qFARp6zwXbxBDPZcAo9_r3mEg.PNG/image.png?type=w773"><br>  
 
 실행결과는 이와 같으므로  
-<img align="left" width="500" height="300" src="https://postfiles.pstatic.net/MjAyNTEwMTJfMjg1/MDAxNzYwMjU2MTE1OTY2.xKb8QpP5iPYjEV2gfae1ZNfTN1UE8fAXEvWtnJ8N8Akg.iOfZri-WaDufO91MuUDmKlY65i02EN1ywy5ccFl0fbsg.PNG/image.png?type=w773">  
+<img width="500" height="300" src="https://postfiles.pstatic.net/MjAyNTEwMTJfMjg1/MDAxNzYwMjU2MTE1OTY2.xKb8QpP5iPYjEV2gfae1ZNfTN1UE8fAXEvWtnJ8N8Akg.iOfZri-WaDufO91MuUDmKlY65i02EN1ywy5ccFl0fbsg.PNG/image.png?type=w773">  
 (a)의 답은 \vec{x'} = [0, 1, 0; 0, 0, 1; -48 -44 -12] * \vec{x} + [0;0;1] * \vec{r},  
 y(t) = [5, 8, 0] * \vec{x} 이다.  
   
 상태천이를 구하는 코드는 이와 같으며  
-<img align="left" width="500" height="300" src="https://postfiles.pstatic.net/MjAyNTEwMTJfMTIg/MDAxNzYwMjU2NjExOTI0.rmFARDLyojk0M7ui0M3uV-Ef8N3Nje0CISC7bMraPj8g.LKko2TIdeCeDQI-0LP0H5oyHxTTyU1XI_0Ah-fcQsR8g.PNG/image.png?type=w773">  
+<img width="500" height="300" src="https://postfiles.pstatic.net/MjAyNTEwMTJfMTIg/MDAxNzYwMjU2NjExOTI0.rmFARDLyojk0M7ui0M3uV-Ef8N3Nje0CISC7bMraPj8g.LKko2TIdeCeDQI-0LP0H5oyHxTTyU1XI_0Ah-fcQsR8g.PNG/image.png?type=w773">  
   
 실행결과는 이와 같다.  
-(b) <img align="left" width="500" height="300" src="https://postfiles.pstatic.net/MjAyNTEwMTJfMjg0/MDAxNzYwMjU2NjQ1Mzky.dC1RzvZvoH_2AtGw0T4lkf49refs135ik3J4T-t-yecg.2QzrJE_DsIaWe6VUtYlraIOIBhpN2RbQPPlFKpetxo8g.PNG/image.png?type=w773">  
+(b) <img width="500" height="300" src="https://postfiles.pstatic.net/MjAyNTEwMTJfMjg0/MDAxNzYwMjU2NjQ1Mzky.dC1RzvZvoH_2AtGw0T4lkf49refs135ik3J4T-t-yecg.2QzrJE_DsIaWe6VUtYlraIOIBhpN2RbQPPlFKpetxo8g.PNG/image.png?type=w773">  
   
 ###P3.17 다음과 같은 상태변수 방정식으로 표현된 시스템이 있다.  \vec{x'} = [1, 1, 1; 4, 3, 0; -2, 1, 10] * \vec{x} + [0; 0; 4] * \vec{u(t)}  
 \vec{y} = [1, 0, 0] * \vec{x}, G(s) = Y(s) / U(s)를 구하라.  
 이를 실행시키는 코드는 이와 같으며  
-<img align="left" width="500" height="300" src="https://postfiles.pstatic.net/MjAyNTEwMTJfMTY4/MDAxNzYwMjU3MDI5NDUz.qgL_koPzS0uKBfIt9bKYjuW9ADr3RkbgGCVwdvaip9wg.ET3alscUPJaDvSfXoXK6zbbiGbnnFrXSLEtvFvum_rYg.PNG/image.png?type=w773">  
+<img width="500" height="300" src="https://postfiles.pstatic.net/MjAyNTEwMTJfMTY4/MDAxNzYwMjU3MDI5NDUz.qgL_koPzS0uKBfIt9bKYjuW9ADr3RkbgGCVwdvaip9wg.ET3alscUPJaDvSfXoXK6zbbiGbnnFrXSLEtvFvum_rYg.PNG/image.png?type=w773">  
 
 G(s)의 결과 값은 이렇게 된다.  
-<img align="left" width="500" height="300" src="https://postfiles.pstatic.net/MjAyNTEwMTJfMTgg/MDAxNzYwMjU3MDQ2NzYz.khnw7bQP89p_nkTymCjVGwqYzsoco4dxhMix_J5tKyQg.io3nx5J443Z47nadsq7LICX4tD7S29H0juMAM2QXGJ4g.PNG/image.png?type=w773">
+<img width="500" height="300" src="https://postfiles.pstatic.net/MjAyNTEwMTJfMTgg/MDAxNzYwMjU3MDQ2NzYz.khnw7bQP89p_nkTymCjVGwqYzsoco4dxhMix_J5tKyQg.io3nx5J443Z47nadsq7LICX4tD7S29H0juMAM2QXGJ4g.PNG/image.png?type=w773">
