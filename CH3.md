@@ -15,7 +15,7 @@ F(t) = M(d^2y/dt) - b(dy/dt) -ky => M(dx_2(t)/dt) = bx_2(t) + kx_1(t) + F(t)
   
 ###P3.3 그림의3.3과 같은 RLC회로가 주어졌다. 상태변수 x_1(t) = i_L(t), x_2(t) = v_c(t)로 설정하고 상태미분방정식을 구하라.  
   
-<img align="left" width="150" height="100" src="https://postfiles.pstatic.net/MjAyNTEwMTJfMTEz/MDAxNzYwMjUyNzk1MTMy.oJHbmt2fa_RWt6dsUj7Ehs84Kcb9sKcz624U41unUuQg.yb3GOzzYnzexJeHYb87YRGNyylWkWNMb0MgE3QHnDtIg.PNG/image.png?type=w773"><br>
+<img width="150" height="100" src="https://postfiles.pstatic.net/MjAyNTEwMTJfMTEz/MDAxNzYwMjUyNzk1MTMy.oJHbmt2fa_RWt6dsUj7Ehs84Kcb9sKcz624U41unUuQg.yb3GOzzYnzexJeHYb87YRGNyylWkWNMb0MgE3QHnDtIg.PNG/image.png?type=w773"><br>
   
 L*(di_L/dt) - v_c + v_2 - v_1 = 0  
 i_L = i_R - C*(dv_c(t)/dt), v_R = v_2 - v_c = (i_R)*R => i_R = (v_2 - v_c)/R  
