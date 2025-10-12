@@ -10,7 +10,7 @@ F(t) = M(d^2y/dt) - b(dy/dt) -ky => M(dx_2(t)/dt) = bx_2(t) + kx_1(t) + F(t)
 (b) dx_2(t)/dt = (b/M)*x_2(t) + (k/M)*x_1(t) + (1/M)*F(t)  
     dx_1(t)/dt = x_2(t)  
 (c) \vec{x'} = [0, 1; k/M, b/M]* \vec{x} + [0; 1/M] * \vec{F(t)}  
-  \vec{y(t)} = [0, 1] * \vec{x}  
+  \vec{y(t)} = [0, 1] * \vec{x}<br>
 
   
 ###P3.3 그림의3.3과 같은 RLC회로가 주어졌다. 상태변수 x_1(t) = i_L(t), x_2(t) = v_c(t)로 설정하고 상태미분방정식을 구하라.  
