@@ -32,8 +32,9 @@ y(t) = z'(t) + 2z(t), r(t) = z'''(t) + 5z''(t) -23z'(t) + 2z(t)가 되므로
 x'_3 = z'''(t) = -2z + 23z' - 5z'' + r(t) = -2x_1(t) + 23x_2(t) - 5x_3(t) + r(t)  
 y(t) = x_2(t) + 2x_1(t)이므로  
 (b) \vec{x'} = [0, 1, 0; 0, 0, 1; -2, 23, -5] * \vec{x} + [0; 0; 1] * \vec{r}  
-\vec{y} = [2, 1, 0] * \vec{x}가 된다.  
+\vec{y} = [2, 1, 0] * \vec{x}가 된다.<br>  
 
+  
 ###P3.12 전달함수가 Y(s)/R(s) = T(s) = 8*(s+5)/(s^3 + 12s^2 + 44s + 48)인 시스템에서 (a) 상태공간모델을 구하라. (b) 상태천이행렬 Φ(t) 를 구하라.  
 a문제를 실행시키는 코드이며  
 <img align="left" width="500" height="300" src="https://postfiles.pstatic.net/MjAyNTEwMTJfMTQy/MDAxNzYwMjU2MDkwODgy.QVKePq8rz_L_Bfk-bms9dSCX6fL4cLg-fyoSVeVWFAkg.K_hywO-1MP_RgeC7y38qFARp6zwXbxBDPZcAo9_r3mEg.PNG/image.png?type=w773">  
