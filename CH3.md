@@ -10,7 +10,7 @@ F(t) = M(d^2y/dt) - b(dy/dt) -ky => M(dx_2(t)/dt) = bx_2(t) + kx_1(t) + F(t)
 (b) dx_2(t)/dt = (b/M)*x_2(t) + (k/M)*x_1(t) + (1/M)*F(t)  
     dx_1(t)/dt = x_2(t)  
 (c) \vec{x'} = [0, 1; k/M, b/M]* \vec{x} + [0; 1/M] * \vec{F(t)}  
-  \vec{y(t)} = [0, 1] * \vec{x}<br>
+  \vec{y(t)} = [0, 1] * \vec{x}\n\n
 
   
 ###P3.3 그림의3.3과 같은 RLC회로가 주어졌다. 상태변수 x_1(t) = i_L(t), x_2(t) = v_c(t)로 설정하고 상태미분방정식을 구하라.  
@@ -56,4 +56,4 @@ y(t) = [5, 8, 0] * \vec{x} 이다.
 <img align="left" width="500" height="300" src="https://postfiles.pstatic.net/MjAyNTEwMTJfMTY4/MDAxNzYwMjU3MDI5NDUz.qgL_koPzS0uKBfIt9bKYjuW9ADr3RkbgGCVwdvaip9wg.ET3alscUPJaDvSfXoXK6zbbiGbnnFrXSLEtvFvum_rYg.PNG/image.png?type=w773">  
 
 G(s)의 결과 값은 이렇게 된다.  
-<img align="left" width="500" height="300" src="https://postfiles.pstatic.net/MjAyNTEwMTJfMTgg/MDAxNzYwMjU3MDQ2NzYz.khnw7bQP89p_nkTymCjVGwqYzsoco4dxhMix_J5tKyQg.io3nx5J443Z47nadsq7LICX4tD7S29H0juMAM2QXGJ4g.PNG/image.png?type=w773"> 
+<img align="left" width="500" height="300" src="https://postfiles.pstatic.net/MjAyNTEwMTJfMTgg/MDAxNzYwMjU3MDQ2NzYz.khnw7bQP89p_nkTymCjVGwqYzsoco4dxhMix_J5tKyQg.io3nx5J443Z47nadsq7LICX4tD7S29H0juMAM2QXGJ4g.PNG/image.png?type=w773">
