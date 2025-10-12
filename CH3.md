@@ -44,4 +44,4 @@ y(t) = [5, 8, 0] * \vec{x} 이다.
 ###P3.17 다음과 같은 상태변수 방정식으로 표현된 시스템이 있다.  \vec{x'} = [1, 1, 1; 4, 3, 0; -2, 1, 10] * \vec{x} + [0; 0; 4] * \vec{u(t)}  
 \vec{y} = [1, 0, 0] * \vec{x}, G(s) = Y(s) / U(s)를 구하라.  
 이를 실행시키는 코드는 이와 같으며  
-
+<img align="left" width="100" height="100" src="https://postfiles.pstatic.net/MjAyNTEwMTJfMTY4/MDAxNzYwMjU3MDI5NDUz.qgL_koPzS0uKBfIt9bKYjuW9ADr3RkbgGCVwdvaip9wg.ET3alscUPJaDvSfXoXK6zbbiGbnnFrXSLEtvFvum_rYg.PNG/image.png?type=w773">
