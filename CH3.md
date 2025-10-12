@@ -2,7 +2,7 @@
 
 ###P3.1 그림 P3.1에 스프링-질량-감쇠기 시스템이 주어져있다. (a) 적당한 상태변수를 설정하라. (b) 상태변수로 표현된 1차 미분방정식을 구하라. (c) 상태미분방정식을 구하라.  
 
-<img align="left" width="500" height="300" src="https://postfiles.pstatic.net/MjAyNTEwMTJfOTIg/MDAxNzYwMjUyNzc5NTI0.t4mTuSZDcyGpxDQ3vZ4tSYqhK5dorLBNuvKi_hckmDcg.zOaT9f5_fDyIBzJ1unn0unuxpaXyyLGfGKa8wk1gI1Ag.PNG/image.png?type=w773"> <br>  
+<img align="left" width="500" height="300" src="https://postfiles.pstatic.net/MjAyNTEwMTJfOTIg/MDAxNzYwMjUyNzc5NTI0.t4mTuSZDcyGpxDQ3vZ4tSYqhK5dorLBNuvKi_hckmDcg.zOaT9f5_fDyIBzJ1unn0unuxpaXyyLGfGKa8wk1gI1Ag.PNG/image.png?type=w773"><br>  
 
 F(t) = M(d^2y/dt) - b(dy/dt) -ky => M(dx_2(t)/dt) = bx_2(t) + kx_1(t) + F(t)  
 (a) x_1(t) = y(t), x_2(t) = dy/dt  
