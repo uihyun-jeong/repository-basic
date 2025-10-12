@@ -5,3 +5,5 @@ F(t) = M(d^2y/dt) - b(dy/dt) -ky => M(dx_2(t)/dt) = bx_2(t) + kx_1(t) + F(t)
 (a) x_1(t) = y(t), x_2(t) = dy/dt  
 (b) dx_2(t)/dt = (b/M)*x_2(t) + (k/M)*x_1(t) + (1/M)*F(t)  
     dx_1(t)/dt = x_2(t)  
+(c) x' = [0, 1; k/M, b/M]*x + [0; 1/M]*F(t)  
+  y(t) = [0, 1]*x
