@@ -1,0 +1,896 @@
+아두이노 코드
+#include <Arduino.h>
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+
+// I2C 주소 0x27, 20글자 4줄 디스플레이 설정
+LiquidCrystal_I2C lcd(0x27, 20, 4);
+
+// 통신 속도 (파이썬 코드와 일치해야 함)
+const long BAUD_RATE = 250000;
+const int RELAY_PIN = 3;
+const int LED_PIN = LED_BUILTIN;
+
+// 통신 연결 상태 확인용 변수
+unsigned long lastCmdTime = 0;       // 마지막으로 명령을 받은 시간
+const unsigned long TIMEOUT_MS = 3000; // 3초간 신호 없으면 끊김으로 간주
+bool isConnected = false;            // 현재 파이썬과 연결되어 있는지 여부
+
+// ============================================================
+// 디스플레이 캐시
+// 릴레이 노이즈로 LCD가 초기화될 때, 기존 화면을 복구하기 위한 저장소
+// 4줄 x 21글자 (20글자 + 문자열 끝 NULL)
+// ============================================================
+char displayCache[4][21]; 
+
+// 캐시 메모리를 공백으로 초기화하는 함수
+void clearDisplayCache() {
+  for(int i=0; i<4; i++) {
+    memset(displayCache[i], ' ', 20); // 20칸을 공백으로 채움
+    displayCache[i][20] = '\0';       // 문자열 끝 표시
+  }
+}
+
+// -------------------- LCD 출력 및 저장 함수 --------------------
+// 화면에 글자를 출력하면서, 동시에 displayCache 변수에도 내용을 저장함
+void printLcdLineRaw(int row, const char* text) {
+  char buf[21];
+  int len = strlen(text);
+
+  // 입력된 텍스트가 20자보다 길면 자르고, 짧으면 나머지를 공백으로 채움 (글자 찌꺼기 방지)
+  if (len >= 20) {
+    memcpy(buf, text, 20);
+  } else {
+    memcpy(buf, text, len);
+    memset(buf + len, ' ', 20 - len);
+  }
+  buf[20] = '\0';
+  
+  // 화면에 출력하기 전에 변수(Cache)에 복사해둠
+  strcpy(displayCache[row], buf);
+
+  // 실제 LCD에 출력
+  lcd.setCursor(0, row);
+  lcd.print(buf);
+}
+
+// 화면 복구 함수
+// 릴레이 동작 후 LCD를 재초기화(init)한 뒤, 기억해둔 내용을 다시 뿌려줌
+void restoreDisplay() {
+  for(int i=0; i<4; i++) {
+    lcd.setCursor(0, i);
+    lcd.print(displayCache[i]);
+  }
+}
+
+// -------------------- 시리얼 명령 처리 --------------------
+// 수신 버퍼 및 인덱스
+char lcdRxBuf[150];
+uint8_t lcdRxIdx = 0;
+
+// "LCD:첫줄;두번째줄;..." 형태의 명령을 분석해서 화면에 띄움
+void processLcdCommandLine(char* line) {
+  digitalWrite(LED_PIN, !digitalRead(LED_PIN)); // 데이터 수신 시 LED 깜빡임 (동작 확인용)
+  
+  // 프로토콜 헤더 확인 ("LCD:" 로 시작하는지)
+  if (strncmp(line, "LCD:", 4) != 0) return;
+
+  lastCmdTime = millis(); // 통신 시간 갱신 (타임아웃 방지)
+  isConnected = true;     // 연결 상태 ON
+
+  char* p = line + 4; // "LCD:" 다음 글자부터 시작
+  char* lines[4] = { NULL, NULL, NULL, NULL };
+  int count = 0;
+
+  // 세미콜론(;)을 기준으로 문자열을 잘라서 4개 줄로 나눔
+  lines[count++] = p;
+  while (*p && count < 4) {
+    if (*p == ';') {
+      *p = '\0'; // 세미콜론을 문자열 종료 문자로 변경
+      if (*(p + 1) != '\0') lines[count++] = p + 1; // 다음 줄 시작 위치 저장
+    }
+    p++;
+  }
+
+  // 각 줄을 LCD에 출력 (내부적으로 캐시에도 저장됨)
+  for (int row = 0; row < 4; row++) {
+    if (lines[row]) printLcdLineRaw(row, lines[row]);
+    else printLcdLineRaw(row, ""); // 내용 없으면 빈 줄 출력
+  }
+}
+
+// 시리얼 포트 감시 및 명령 실행
+void pollSerialCommands() {
+  while (Serial.available() > 0) {
+    char c = Serial.read();
+    
+    // 줄바꿈 문자(\n)가 들어오면 명령 완성으로 판단
+    if (c == '\n') {
+      if (lcdRxIdx == 0) continue; // 빈 줄 무시
+      lcdRxBuf[lcdRxIdx] = '\0';   // 문자열 완성
+      lcdRxIdx = 0;                // 버퍼 인덱스 초기화
+
+      // 1) LCD 데이터 수신 명령 ("LCD:...")
+      if (strncmp(lcdRxBuf, "LCD:", 4) == 0) {
+        processLcdCommandLine(lcdRxBuf);
+      }
+      // 2) 릴레이 끄기 명령 (측정 종료)
+      else if (strcmp(lcdRxBuf, "RELAY:OFF") == 0) {
+        digitalWrite(RELAY_PIN, HIGH); // 릴레이 OFF (High Trigger 방식인 경우)
+        
+        // ★★★ [노이즈 대응 핵심 구간] ★★★
+        // 릴레이 접점이 떨어질 때 스파크(노이즈)로 LCD가 깨질 수 있음
+        delay(200);      // 노이즈가 지나갈 때까지 0.2초 대기
+        lcd.init();      // 깨진 LCD 화면 강제 재초기화
+        lcd.backlight(); // 백라이트 다시 켜기
+        
+        // 화면 복구
+        // 재초기화로 화면이 지워졌으므로, 캐시에 저장된 마지막 측정값을 다시 그림
+        restoreDisplay(); 
+      }
+      // 3) 릴레이 켜기 명령 (측정 시작)
+      else if (strcmp(lcdRxBuf, "RELAY:ON") == 0) {
+        digitalWrite(RELAY_PIN, LOW); // 릴레이 ON
+        
+        // 켤 때도 노이즈가 발생할 수 있으므로 안전하게 재초기화 수행
+        delay(200);      
+        lcd.init();      
+        lcd.backlight();
+        
+        // 켤 때는 새로운 측정이 시작되므로 기존 화면(결과값)을 지움
+        clearDisplayCache();
+        lcd.clear(); 
+      }
+    } 
+    // 줄바꿈이 아니면 버퍼에 글자 저장
+    else if (c != '\r') {
+      if (lcdRxIdx < sizeof(lcdRxBuf) - 1) lcdRxBuf[lcdRxIdx++] = c;
+    }
+  }
+}
+
+// 파이썬 프로그램과 연결이 끊어졌는지 체크
+void checkConnectionTimeout() {
+  int relayState = digitalRead(RELAY_PIN); // HIGH=OFF, LOW=ON (회로에 따라 다름)
+  
+  // 연결 상태였는데, 3초(TIMEOUT_MS) 이상 데이터가 없고, 릴레이가 켜져있는(측정 중) 상태라면
+  if (isConnected && (millis() - lastCmdTime > TIMEOUT_MS) && (relayState == LOW)) {
+    isConnected = false;
+    clearDisplayCache(); // 캐시 비움
+    lcd.clear();
+    
+    // 대기 화면 출력
+    lcd.setCursor(0, 0); lcd.print("Ready to Connect");
+    lcd.setCursor(0, 1); lcd.print("Waiting...");
+  }
+}
+
+void setup() {
+  Serial.begin(BAUD_RATE);
+  
+  // 아두이노 R4 등 최신 보드에서 ADC 해상도 설정 (UNO R3는 무시됨)
+  #if defined(ARDUINO_UNOR4_MINIMA) || defined(ARDUINO_UNOR4_WIFI)
+    analogReadResolution(14);
+  #endif
+
+  pinMode(RELAY_PIN, OUTPUT);
+  pinMode(LED_PIN, OUTPUT);
+  digitalWrite(RELAY_PIN, LOW); // 초기 상태: 릴레이 ON
+
+  lcd.init();
+  lcd.backlight();
+  Wire.setClock(400000); // I2C 통신 속도 고속 모드 (400kHz) 설정
+  clearDisplayCache();
+
+  // 초기 대기 메시지
+  lcd.setCursor(0, 0); lcd.print("Ready to Connect");
+  lcd.setCursor(0, 1); lcd.print("Waiting...");
+}
+
+void loop() {
+  // 1. 시리얼 명령 수신 및 처리 (LCD 표시, 릴레이 제어)
+  pollSerialCommands();
+  
+  // 2. 통신 끊김 감지
+  checkConnectionTimeout();
+
+  // 3. 센서 데이터 샘플링 및 전송 (비차단 방식, 1ms 주기)
+  static unsigned long nextSampleMicros = 0;
+  if ((long)(micros() - nextSampleMicros) >= 0) {
+    nextSampleMicros = micros() + 1000; // 1000us = 1ms (1kHz 샘플링)
+    
+    int a0 = analogRead(A0); // 전압/전류 센서값 읽기
+    int a1 = analogRead(A1);
+    
+    // 파이썬으로 원본 데이터 전송 (CSV 형태)
+    Serial.print(a0); Serial.print(','); Serial.println(a1);
+  }
+}
+
+
+파이썬 코드
+import serial
+from collections import deque
+import time
+import sys
+import threading
+import requests
+import numpy as np
+import pyqtgraph as pg
+from PyQt6 import QtWidgets, QtCore, QtGui
+
+# [System] 출력 버퍼링 방지 (터미널 출력 즉시 표시)
+sys.stdout.reconfigure(line_buffering=True)
+
+# ==========================================
+# 0. 전역 설정 및 상태 변수
+# ==========================================
+# [State] 무부하/부하 상태 감지 로직용
+is_active_load = False      # 현재 부하가 켜져있는지 상태 (True/False)
+noise_filter_count = 0      # 미세 부하 판별을 위한 연속 감지 카운터
+
+# [Discord] 알림 설정
+DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1441817840414883942/k9AMZ0Poxpym93me6qYDngZ_sy81AKlj7ULEEpFnQC3PAzBmoEICiXzS1LMFFP51QrlU"
+DISCORD_INTERVAL = 15.0     # 알림 전송 주기 (초)
+last_discord_time = time.time()
+
+# [Discord] 이미지 전송 스레드 (메인 루프 지연 방지)
+def send_image_to_discord_thread(image_bytes, v, i, p, q, pf, cost, thd, load_name):
+    try:
+        now_str = time.strftime('%Y-%m-%d %H:%M:%S')
+        cost_mW = cost
+        
+        load_header = f" 🔌  현재 부하: `{load_name}`\n" if load_name else ""
+        
+        message_content = (
+            load_header +
+            f" ⚡  **Power Monitor Report**\n"
+            f" 📅  Time: `{now_str}`\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"**Voltage (V)** : `{v:.1f} V`\n"
+            f"**Current (I)** : `{i:.2f} A`\n"
+            f"**Active Power (P)** : `{p:.1f} W`\n"
+            f"**Reactive Power (Q)** : `{q:.1f} Var`\n"
+            f"**Power Factor (PF)** : `{pf:.4f}`\n"
+            f"**Accumulated Cost** : `{cost_mW:.1f} mWon`\n"
+            f"**THD (Current)** : `{thd*100:.1f} %`\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━"
+        )
+        files = {"file": ("graph_snapshot.png", image_bytes, "image/png")}
+        data = {"content": message_content}
+        
+        response = requests.post(DISCORD_WEBHOOK_URL, data=data, files=files)
+        if response.status_code not in [200, 204]:
+            print(f">> [Discord] 전송 실패: {response.status_code}")
+    except Exception as e:
+        print(f">> [Discord] 에러: {e}")
+
+# ==========================================
+# 1. 시리얼 통신 설정 (Arduino Connection)
+# ==========================================
+PORT = 'COM5'
+BAUD = 250000
+
+try:
+    ser = serial.Serial(port=PORT, baudrate=BAUD, timeout=0.1)
+    
+    # [Safety] 아두이노 리셋 대기 (연결 직후 데이터 오염 방지)
+    print("Connecting... (Waiting 2s for Arduino Reset)")
+    time.sleep(2.0)
+    
+    # 버퍼 비우기 (쓰레기 데이터 제거)
+    ser.reset_input_buffer()
+    ser.reset_output_buffer()
+    print("Connected to", ser.port)
+except Exception as e:
+    print(f"시리얼 연결 실패: {e}")
+    sys.exit()
+
+# ==========================================
+# 2. 계측 및 연산 파라미터
+# ==========================================
+# [Calibration] 위상 및 ADC 보정 계수
+PHASE_CORR = 0.314          # 위상 보정값 (Rad) - 초기값, 이후 자동 보정됨
+Changing = 5.0 / 16383.0    # ADC(14bit) -> Voltage 변환 계수
+Voffset = 2.4800            # 전압 센서 오프셋 (2.5V 중심)
+Vsec_gain = 7.81            # 전압 센서 2차측 게인
+TURNS_RATIO = 16.9          # 변압기 권선비
+SEN_ZERO_V = 2.5            # 전류 센서 0점 전압
+SEN_SENS = 0.1              # 전류 센서 감도 (mV/A 등)
+
+# [Signal Processing] FFT 및 샘플링
+SAMPLE_RATE = 1000.0        # 샘플링 주파수 (Hz)
+FFT_POINTS = 1024           # FFT 분석 포인트 수
+FFT_INTERVAL = 0.5          # FFT 업데이트 주기 (초)
+next_fft_time = 0.0
+
+# [Gain] 최종 보정 계수
+V_GAIN_CAL  = 1.015         # 전압 최종 튜닝
+I_GAIN_CAL  = 1.03          # 전류 최종 튜닝
+
+# [Cost] 요금 계산 변수
+COST_PER_KWH = 12000.0      # kWh당 요금 (단위: 원)
+energy_Wh = 0.0
+cost = 0.0
+last_energy_time = time.time()
+
+# [Protection] 보호 기능 임계값
+loadCode = 'X'              # 부하 타입 (R/L/C/X)
+I_MIN = 0.065               # 최소 전류 감지 레벨
+POWER_LIMIT_W = 500.0       # 과부하 차단 기준 (W)
+I_LIMIT_A     = 10          # 과전류 차단 기준 (A)
+current_load_name = ""
+calibrating = False         # 보정 동작 중 플래그
+
+# ==========================================
+# 3. 사용자 입력 및 초기화
+# ==========================================
+try:
+    USER_MINUTES = float(input("사용 시간 제한(분, 0=무제한): "))
+except:
+    USER_MINUTES = 0.0
+try:
+    USER_LIMIT_COST = float(input("사용 금액 한도(원, 0=무제한): "))
+except:
+    USER_LIMIT_COST = 0.0
+
+start_time = time.time()
+relay_tripped = False
+
+# ==========================================
+# 4. 제어 및 유틸 함수
+# ==========================================
+def relay_off():
+    """ 릴레이 차단 명령 전송 (노이즈 방지 딜레이 포함) """
+    global relay_tripped
+    if relay_tripped: return
+    relay_tripped = True
+    print(">>> RELAY OFF")
+    try:
+        ser.write(b"RELAY:OFF\n")
+        # [Noise Defense] 릴레이 스위칭 노이즈가 통신을 방해하지 않도록 대기
+        time.sleep(0.5)
+    except: pass
+
+def reset_and_turn_on():
+    """ 시스템 리셋 및 릴레이 복구 """
+    global relay_tripped, start_time, energy_Wh, cost, last_history_time
+    relay_tripped = False
+    start_time = time.time()
+    energy_Wh = 0.0
+    cost = 0.0
+    p_history.clear(); q_history.clear(); cost_history.clear()
+    last_history_time = time.time()
+    try:
+        ser.write(b"RELAY:ON\n")
+        time.sleep(0.5)
+    except: pass
+
+def on_load_name_changed(text):
+    global current_load_name
+    current_load_name = text.strip()
+
+def adc_to_voltage_primary(adc):
+    return ((adc*Changing - Voffset) * Vsec_gain * TURNS_RATIO) * V_GAIN_CAL
+
+def adc_to_current(adc):
+    return ((adc*Changing - SEN_ZERO_V) / SEN_SENS) * I_GAIN_CAL
+
+def make_lcd_line(text):
+    return f"{text:<20}"[:20]
+
+def send_lcd(lines):
+    """ 아두이노 LCD로 메시지 전송 (4줄) """
+    packet = "LCD:" + ";".join(lines) + "\n"
+    # print(f">> Sending to Arduino: {packet.strip()}") # 디버그용
+    try: ser.write(packet.encode())
+    except: pass
+
+# ==========================================
+# 5. 데이터 버퍼 및 GUI 초기화
+# ==========================================
+MAX_POINTS = 500
+VIEW_POINTS = 100
+v_buf = deque([0.0] * MAX_POINTS, maxlen=MAX_POINTS)
+i_buf = deque([0.0] * MAX_POINTS, maxlen=MAX_POINTS)
+
+MAX_HISTORY = 200
+p_history = deque([], maxlen=MAX_HISTORY)
+q_history = deque([], maxlen=MAX_HISTORY)
+cost_history = deque([], maxlen=MAX_HISTORY)
+last_history_time = time.time()
+last_lcd_time = time.time()
+
+# [GUI Setup] PyQtGraph 설정
+pg.setConfigOption('background', 'w')
+pg.setConfigOption('foreground', 'k')
+pg.setConfigOption('antialias', True)
+
+app = QtWidgets.QApplication([])
+main_win = QtWidgets.QWidget()
+main_win.setWindowTitle("Power Monitor (Hybrid Mode)")
+main_layout = QtWidgets.QVBoxLayout(main_win)
+
+# [UI] 컨트롤 패널
+control_layout = QtWidgets.QHBoxLayout()
+btn_calib = QtWidgets.QPushButton("No-load Calibrate (0A)")
+btn_calib.setFixedHeight(40)
+control_layout.addWidget(btn_calib)
+
+btn_pf_calib = QtWidgets.QPushButton("PF Calibrate (R load)")
+btn_pf_calib.setFixedHeight(40)
+control_layout.addWidget(btn_pf_calib)
+main_layout.addLayout(control_layout)
+
+# [UI] 부하 이름 입력
+load_layout = QtWidgets.QHBoxLayout()
+load_layout.addWidget(QtWidgets.QLabel("현재 부하 이름:"))
+edit_load = QtWidgets.QLineEdit()
+edit_load.setPlaceholderText("예: 드라이기, 노트북")
+load_layout.addWidget(edit_load)
+main_layout.addLayout(load_layout)
+
+# [UI] 리셋 버튼
+btn_reset = QtWidgets.QPushButton("Relay Reset / ON")
+btn_reset.setFixedHeight(40)
+main_layout.addWidget(btn_reset)
+
+# [UI] 그래프 영역
+gwin = pg.GraphicsLayoutWidget()
+main_layout.addWidget(gwin)
+main_win.resize(1100, 950)
+main_win.show()
+
+# 그래프 1: 전압 파형
+plot_v = gwin.addPlot(row=0, col=0, title="Voltage Waveform (Raw)")
+plot_v.showGrid(x=True, y=True)
+plot_v.setXRange(0, VIEW_POINTS)
+plot_v.setYRange(-300, 300)
+curve_v = plot_v.plot(pen=pg.mkPen('r', width=3))
+
+# 그래프 2: 전류 파형
+plot_i = gwin.addPlot(row=1, col=0, title="Current Waveform (Raw)")
+plot_i.showGrid(x=True, y=True)
+plot_i.setXRange(0, VIEW_POINTS)
+plot_i.setYRange(-10, 10)
+curve_i = plot_i.plot(pen=pg.mkPen('b', width=3))
+
+# 그래프 3: 고조파(Harmonics) 시간 도메인
+plot_harm = gwin.addPlot(row=2, col=0, title="Harmonics (Time Domain)")
+plot_harm.addLegend()
+plot_harm.setXRange(0, VIEW_POINTS)
+curve_h1 = plot_harm.plot(pen='orange', name='1st')
+curve_h3 = plot_harm.plot(pen='m', name='3rd')
+curve_h5 = plot_harm.plot(pen='g', name='5th')
+
+# 그래프 4: P/Q 트렌드
+plot_pq = gwin.addPlot(row=3, col=0, title="P / Q Trend")
+plot_pq.addLegend()
+curve_p = plot_pq.plot(pen=pg.mkPen('r', width=3), name='P')
+curve_q = plot_pq.plot(pen=pg.mkPen('b', width=3, style=QtCore.Qt.PenStyle.DashLine), name='Q')
+
+# 그래프 5: 요금
+plot_cost = gwin.addPlot(row=4, col=0, title="Cost")
+curve_cost = plot_cost.plot(pen='k')
+
+# [UI] 페이저 다이어그램 윈도우
+win_phasor = pg.GraphicsLayoutWidget(title="Phasor Diagram")
+win_phasor.resize(500, 500)
+win_phasor.show()
+plot_phasor = win_phasor.addPlot()
+plot_phasor.setAspectLocked(True)
+plot_phasor.setXRange(-1.2, 1.2)
+plot_phasor.setYRange(-1.2, 1.2)
+plot_phasor.showGrid(x=True, y=True)
+theta = np.linspace(0, 2 * np.pi, 100)
+plot_phasor.plot(np.cos(theta), np.sin(theta), pen=pg.mkPen('k', style=QtCore.Qt.PenStyle.DotLine))
+vec_v = plot_phasor.plot(pen=pg.mkPen('b', width=3)) # 전압 벡터
+vec_i = plot_phasor.plot(pen=pg.mkPen('r', width=3)) # 전류 벡터
+win_phasor.nextRow()
+label_phasor_info = win_phasor.addLabel("Waiting...", size="14pt")
+
+# [UI] FFT 스펙트럼 윈도우
+win_fft = pg.GraphicsLayoutWidget(title="Current Harmonic Spectrum (dB)")
+win_fft.resize(600, 400)
+win_fft.show()
+plot_fft = win_fft.addPlot()
+plot_fft.setXRange(0, 420)
+plot_fft.setYRange(-100, 0)
+plot_fft.showGrid(x=True, y=True)
+plot_fft.getAxis('bottom').setTicks([[(60 * k, f"{k}H") for k in range(1, 8)]])
+curve_fft = plot_fft.plot(pen='k', fillLevel=-120, brush=(100,100,100,50))
+
+# ==========================================
+# 6. 보정(Calibration) 로직
+# ==========================================
+def no_load_calibrate():
+    """ 무부하 상태에서 0점(Zero Offset) 자동 보정 """
+    global Voffset, SEN_ZERO_V, calibrating
+    if calibrating: return
+    calibrating = True
+    print(">>> 무부하 보정 시작")
+    btn_calib.setEnabled(False); btn_calib.setText("Calibrating...")
+    QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.CursorShape.WaitCursor)
+    
+    success = False
+    try:
+        try:
+            while ser.in_waiting: ser.readline() # 버퍼 비우기
+        except: pass
+        
+        v_samples, i_samples = [], []
+        t0 = time.time()
+        while time.time() - t0 < 5.0: # 5초간 데이터 수집
+            if ser.in_waiting:
+                try:
+                    line = ser.readline().decode(errors="ignore").strip()
+                    parts = line.split(',')
+                    if len(parts)==2:
+                        v_samples.append(int(parts[0]))
+                        i_samples.append(int(parts[1]))
+                except: pass
+            time.sleep(0.002)
+            
+        if len(v_samples) > 100:
+            mean_v = sum(v_samples)/len(v_samples)
+            mean_i = sum(i_samples)/len(i_samples)
+            Voffset = mean_v * Changing
+            SEN_ZERO_V = mean_i * Changing
+            print(f"New Voffset={Voffset:.4f}, ZERO_V={SEN_ZERO_V:.4f}")
+            success = True
+    finally:
+        calibrating = False
+        btn_calib.setEnabled(True); btn_calib.setText("No-load Calibrate")
+        QtWidgets.QApplication.restoreOverrideCursor()
+        if success:
+            QtWidgets.QMessageBox.information(main_win, "Done", "무부하 0점 보정 완료")
+
+def compute_fundamental_power(v_arr, i_arr, Fs=SAMPLE_RATE):
+    """
+    [핵심 알고리즘] FFT를 이용한 기본파(60Hz) 전력 및 위상차 계산
+    Return: P1, Q1, S1, PF1, Vrms1, Irms1, phi(위상차)
+    """
+    N = len(v_arr)
+    if N < 200: return None
+    
+    # 1. 윈도우 함수 적용 (DC 제거 및 Spectral Leakage 방지)
+    n = np.arange(N)
+    window = np.hamming(N)
+    v_win = (v_arr - np.mean(v_arr)) * window
+    i_win = (i_arr - np.mean(i_arr)) * window
+    
+    # 2. DFT로 60Hz 성분 추출
+    w = np.exp(-1j * 2 * np.pi * 60 * n / Fs)
+    V1 = np.sum(v_win * w)
+    I1 = np.sum(i_win * w)
+    
+    # 3. RMS 및 전력 계산
+    wr = np.sqrt(np.mean(window ** 2))
+    K = np.sqrt(2) / (N * wr + 1e-12)
+    Vrms1 = K * abs(V1)
+    Irms1 = K * abs(I1)
+    
+    if Vrms1 < 1e-6 or Irms1 < 1e-6: return None
+    S1 = Vrms1 * Irms1
+    
+    # 4. 위상차(phi) 계산: 전압각도 - 전류각도
+    phi = np.angle(V1) - np.angle(I1)
+    
+    PF1 = np.cos(phi)
+    P1  = S1 * PF1
+    Q1  = S1 * np.sin(phi)
+    
+    return P1, Q1, S1, PF1, Vrms1, Irms1, phi
+
+def calibrate_PF_resistive(v_arr, i_raw):
+    """ 저항 부하(역률 1.0)를 기준으로 위상 보정값(PHASE_CORR) 자동 튜닝 """
+    global PHASE_CORR
+    # 현재 설정값으로 임시 보정
+    shift = (PHASE_CORR / (2*np.pi)) * (SAMPLE_RATE/60.0)
+    idx = np.arange(len(i_raw))
+    i_shifted = np.interp(idx + shift, idx, i_raw)
+    
+    res = compute_fundamental_power(v_arr, i_shifted)
+    if res is None: return
+    P1, Q1, _, _, _, _, _ = res
+    
+    if abs(P1) < 10:
+        print("부하 부족"); return
+        
+    # 오차 각도 계산하여 보정값 업데이트 (지상/진상 방향 고려)
+    phi_err = np.arctan2(Q1, P1)
+    PHASE_CORR -= phi_err
+    print(f"New Phase Corr: {np.degrees(PHASE_CORR):.2f}°")
+
+def pf_calibrate_button_clicked():
+    global calibrating
+    if calibrating: return
+    
+    v_arr = np.array(v_buf)
+    i_arr = np.array(i_buf)
+    if len(v_arr) < 200:
+        QtWidgets.QMessageBox.warning(main_win,"Err","데이터 부족")
+        return
+        
+    calibrating = True
+    btn_pf_calib.setEnabled(False)
+    QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.CursorShape.WaitCursor)
+    try:
+        Nwin = min(FFT_POINTS, len(v_arr))
+        calibrate_PF_resistive(v_arr[-Nwin:], i_arr[-Nwin:])
+        QtWidgets.QMessageBox.information(main_win, "Done", f"보정 완료\n보정각: {np.degrees(PHASE_CORR):.2f}°")
+    except Exception as e:
+        print(e)
+    finally:
+        calibrating = False
+        btn_pf_calib.setEnabled(True)
+        QtWidgets.QApplication.restoreOverrideCursor()
+
+# ==========================================
+# 7. 메인 업데이트 루프 (타이머)
+# ==========================================
+Vrms, Irms, P, Q, S, PF, THD_I = 0,0,0,0,0,0,0
+P_disp, Q_disp = 0, 0
+
+def update():
+    global Vrms, Irms, P, Q, S, PF, THD_I, P_disp, Q_disp
+    global energy_Wh, cost, last_energy_time, last_history_time, last_lcd_time
+    global loadCode, next_fft_time, last_discord_time
+    global is_active_load, noise_filter_count
+
+    if calibrating: return
+
+    # 1. 시리얼 데이터 수신 (Raw Data -> Buffer)
+    while ser.in_waiting:
+        try:
+            line = ser.readline().decode().strip()
+            parts = line.split(',')
+            if len(parts)==2:
+                v_buf.append(adc_to_voltage_primary(int(parts[0])))
+                i_buf.append(adc_to_current(int(parts[1])))
+        except: pass
+    if len(v_buf) > MAX_POINTS+100: pass 
+    
+    v_arr = np.array(v_buf)
+    i_raw = np.array(i_buf)
+    if len(v_arr) < 20: return
+
+    # [Step 1] 시간축 보정 (Phase Correction)
+    # 센서 지연 등을 보정하기 위해 전류 파형을 미세하게 이동 (보정값 적용)
+    shift_amt = (PHASE_CORR / (2 * np.pi)) * (SAMPLE_RATE / 60.0)
+    idxs = np.arange(len(i_raw))
+    i_arr = np.interp(idxs + shift_amt, idxs, i_raw)
+
+    # 그래프 업데이트 (Raw Waveform)
+    curve_v.setData(v_arr)
+    curve_i.setData(i_arr)
+
+    # [Step 2] 전력 지표 계산
+    Nwin = min(FFT_POINTS, len(v_arr))
+    v_seg = v_arr[-Nwin:]
+    i_seg = i_arr[-Nwin:]
+    
+    Vrms = float(np.sqrt(np.mean(v_seg**2)))
+    Vrms = max(0.0, Vrms - 2.0) # 노이즈 플로어 제거
+    Irms = float(np.sqrt(np.mean((i_seg - np.mean(i_seg))**2)))
+    S = Vrms * Irms
+
+    # [Step 3] 기본파 분석 (위상차, P, Q 추출)
+    fund = compute_fundamental_power(v_seg, i_seg)
+    if fund is not None and S > 1e-6:
+        _, _, _, _, _, _, phi_val = fund
+        raw_phi_rad = phi_val
+        PF = np.cos(raw_phi_rad)
+        P  = S * PF
+        Q  = S * np.sin(raw_phi_rad)
+    else:
+        PF, P, Q, raw_phi_rad = 0.0, 0.0, 0.0, 0.0
+
+    # ---------------------------------------------------------
+    # [Step 4] 노이즈 필터 및 히스테리시스 (Hysteresis Filter)
+    # ---------------------------------------------------------
+    # 목적: 0~4W 수준의 노이즈와 실제 소형 부하(5W~)를 구분
+    UPPER_THRESHOLD = 6.0   # 켜짐 판정 기준 (W)
+    LOWER_THRESHOLD = 2.0   # 꺼짐 판정 기준 (W)
+    REQUIRED_COUNT = 10     # 연속 감지 횟수 (약 1초)
+    abs_P = abs(P)
+
+    if is_active_load:
+        # [상태: 켜짐] 꺼질 때는 반응성을 위해 기준 이하 즉시 차단
+        if abs_P < LOWER_THRESHOLD:
+            is_active_load = False
+            noise_filter_count = 0
+            # 0처리
+            P, Q, S, PF = 0.0, 0.0, 0.0, 0.0
+            if Irms < 0.5: Irms = 0.0
+    else:
+        # [상태: 꺼짐] 켜질 때는 노이즈 방지를 위해 연속 감지 필요
+        if abs_P > UPPER_THRESHOLD:
+            noise_filter_count += 1
+            if noise_filter_count >= REQUIRED_COUNT:
+                is_active_load = True # 부하 인정
+                noise_filter_count = 0
+            else:
+                # 아직 카운트 부족 -> 노이즈로 간주하고 0 처리
+                P, Q, S, PF = 0.0, 0.0, 0.0, 0.0
+                if Irms < 0.5: Irms = 0.0
+        else:
+            # 기준 미달 시 카운터 리셋
+            noise_filter_count = 0
+            P, Q, S, PF = 0.0, 0.0, 0.0, 0.0
+            if Irms < 0.5: Irms = 0.0
+
+    # [Step 5] 부하 타입 판별
+    if P == 0.0: loadCode = 'x'
+    elif abs(PF) > 0.95: loadCode = 'R' # 저항성
+    elif Q > 0: loadCode = 'L'          # 유도성 (모터 등)
+    elif Q < 0: loadCode = 'C'          # 용량성
+    else: loadCode = 'x'
+
+    # [Display] 값 안정화 (EMA 필터)
+    alpha = 1.0
+    P_disp = (1-alpha)*P_disp + alpha*P
+    Q_disp = (1-alpha)*Q_disp + alpha*Q
+
+    # [Display] 페이저 다이어그램 업데이트
+    vec_v.setData([0, 1], [0, 0])
+    if Irms >= I_MIN and S >= 5.0:
+        draw_ang = -raw_phi_rad
+        vec_i.setData([0, np.cos(draw_ang)], [0, np.sin(draw_ang)])
+        deg = np.degrees(abs(raw_phi_rad))
+        status = f"{deg:.1f}° ({'Resistive' if loadCode=='R' else 'Lag' if Q>0 else 'Lead'})"
+    else:
+        vec_i.setData([0,0], [0,0])
+        status = "No Load"
+    label_phasor_info.setText(f"<b style='color:blue'>V:{Vrms:.1f}V</b> | <b style='color:red'>I:{Irms:.2f}A</b><br>Phase: {status}")
+
+    # [Analysis] THD 및 고조파 분석
+    if Irms < I_MIN:
+        THD_I = 0.0
+        curve_fft.setData([], []); curve_h1.setData([], []); curve_h3.setData([], []); curve_h5.setData([], [])
+    else:
+        now = time.time()
+        if now >= next_fft_time:
+            next_fft_time = now + FFT_INTERVAL
+            i_fft = i_arr[-FFT_POINTS:]
+            # FFT 연산
+            win = np.hamming(len(i_fft))
+            i_win = (i_fft - np.mean(i_fft)) * win
+            fft = np.fft.rfft(i_win)
+            mags = np.abs(fft)
+            freqs = np.fft.rfftfreq(len(i_fft), 1/SAMPLE_RATE)
+            
+            # 스펙트럼 표시
+            mx = mags.max()
+            db = 20*np.log10((mags+1e-12)/mx) if mx>0 else np.full_like(mags, -120)
+            curve_fft.setData(freqs[freqs<=420], db[freqs<=420])
+            
+            # THD 계산
+            bin_w = SAMPLE_RATE/len(i_fft)
+            k1 = int(round(60.0/bin_w))
+            fund_mag = mags[k1]
+            harm_sq_sum = 0.0
+            for h in range(2, 8):
+                c_idx = k1 * h
+                for off in range(-2, 3):
+                    idx = c_idx + off
+                    if 0 <= idx < len(mags) and mags[idx] > fund_mag * 0.005:
+                        harm_sq_sum += mags[idx]**2
+            THD_I = np.sqrt(harm_sq_sum)/fund_mag if fund_mag>0 else 0.0
+            
+            # 고조파 파형 추출 (시각화용)
+            scale = 2.0 / np.sum(win)
+            t = np.arange(VIEW_POINTS)
+            def get_wave(order, color_curve):
+                idx = k1 * order
+                if idx < len(mags):
+                    amp = mags[idx] * scale
+                    color_curve.setData(amp * np.sin(2*np.pi*60*order*t/SAMPLE_RATE))
+                else: color_curve.setData([], [])
+            get_wave(1, curve_h1); get_wave(3, curve_h3); get_wave(5, curve_h5)
+
+    # ---------------------------------------------------------
+    # [Step 6] 요금 적산 및 보호(Protection) 로직
+    # ---------------------------------------------------------
+    now = time.time()
+    dt = now - last_energy_time
+    last_energy_time = now
+    
+    # 에너지 적산
+    energy_Wh += P * dt / 3600.0
+    cost = energy_Wh * COST_PER_KWH / 1000.0
+    
+    # 히스토리 업데이트
+    if now - last_history_time >= 1.0:
+        last_history_time = now
+        p_history.append(P_disp); q_history.append(Q_disp); cost_history.append(cost)
+        curve_p.setData(p_history); curve_q.setData(q_history); curve_cost.setData(cost_history)
+
+    # 보호 기능 체크 (Priority: Current > Power > Cost > Time)
+    elapsed = (now - start_time) / 60.0
+    trip = False
+    stop_cause = None
+
+    if I_LIMIT_A > 0.0 and Irms >= I_LIMIT_A:
+        trip = True; stop_cause = "OC"          # Over Current
+    elif POWER_LIMIT_W > 0.0 and P >= POWER_LIMIT_W:
+        trip = True; stop_cause = "POWER"       # Over Power
+    elif USER_LIMIT_COST > 0.0 and cost >= USER_LIMIT_COST:
+        trip = True; stop_cause = "COST"        # Cost Limit
+    elif USER_MINUTES > 0 and elapsed >= USER_MINUTES:
+        trip = True; stop_cause = "TIME"        # Time Over
+
+    if trip and not relay_tripped:
+        # 아두이노로 차단 메시지 전송 (영문 필수)
+        if stop_cause == "TIME":
+            send_lcd([make_lcd_line("Timer Finished"), make_lcd_line(f"Used: {elapsed:5.1f} min"), make_lcd_line("RELAY OFF"), make_lcd_line("Reset Required")])
+        elif stop_cause == "OC":
+            send_lcd([make_lcd_line("Over Current!"), make_lcd_line(f"Peak I = {Irms:5.2f} A"), make_lcd_line("RELAY OFF"), make_lcd_line("Check Load")])
+        elif stop_cause == "POWER":
+            send_lcd([make_lcd_line("Over Power!"), make_lcd_line(f"Peak P = {P:6.1f} W"), make_lcd_line("RELAY OFF"), make_lcd_line("Check Load")])
+        elif stop_cause == "COST":
+            send_lcd([make_lcd_line("Cost Limit!"), make_lcd_line(f"Cost= {cost:6.1f} mW"), make_lcd_line("RELAY OFF"), make_lcd_line("Insert Coin")])
+        
+        time.sleep(0.5) # 메시지 전송 보장 대기
+        relay_off()
+
+    # LCD 업데이트 (정상 동작 중일 때만)
+    if not relay_tripped and now - last_lcd_time >= 1.0:
+        last_lcd_time = now
+        lines = [
+            make_lcd_line(f"V={Vrms:5.1f}V I={Irms:5.2f}A"),
+            make_lcd_line(f"P={P_disp:6.1f}W Q={Q_disp:6.1f}"),
+            make_lcd_line(f"PF={PF:6.4f} C={cost:6.2f}mW"),
+            make_lcd_line(f"THD={THD_I*100:5.1f}% Type={loadCode}")
+        ]
+        send_lcd(lines)
+
+    # 디스코드 보고서 전송
+    if now - last_discord_time >= DISCORD_INTERVAL:
+        last_discord_time = now
+        pix = main_win.grab()
+        ba = QtCore.QByteArray()
+        buf = QtCore.QBuffer(ba)
+        buf.open(QtCore.QIODevice.OpenModeFlag.WriteOnly)
+        pix.save(buf, "PNG")
+        threading.Thread(
+            target=send_image_to_discord_thread,
+            args=(ba.data(), Vrms, Irms, P_disp, Q_disp, PF, cost, THD_I, current_load_name),
+            daemon=True
+        ).start()
+
+# 시그널 연결
+btn_reset.clicked.connect(reset_and_turn_on)
+edit_load.textChanged.connect(on_load_name_changed)
+btn_calib.clicked.connect(no_load_calibrate)
+btn_pf_calib.clicked.connect(pf_calibrate_button_clicked)
+
+# ==========================================
+# 8. 프로그램 실행 및 종료 처리
+# ==========================================
+timer = QtCore.QTimer()
+timer.timeout.connect(update)
+timer.start(100) # 100ms 간격 업데이트
+
+def cleanup():
+    print("\n>>> Exiting...")
+    if timer.isActive(): timer.stop()
+    if 'ser' in globals() and ser.is_open:
+        try:
+            # 종료 화면 전송
+            lines = ["Ready to Connect    ", "Waiting...          ", "PC Program Closed   ", "                    "]
+            packet = "LCD:" + ";".join(lines) + "\n"
+            ser.write(packet.encode())
+            time.sleep(0.5)
+        except Exception as e:
+            print(f"Exit msg error: {e}")
+        try: ser.close()
+        except: pass
+    print("Serial closed.")
+
+app.aboutToQuit.connect(cleanup)
+try:
+    sys.exit(app.exec())
+except KeyboardInterrupt:
+    cleanup()
+    sys.exit()
